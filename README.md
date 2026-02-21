@@ -55,7 +55,7 @@ pip install fastapi uvicorn requests pypdf
 Run the backend server:
 
 ```bash
-python main.py
+uvicorn main:app --reload
 ```
 > The backend will be available at `http://localhost:8000`.
 
