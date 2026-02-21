@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { Send, Sparkles, Loader2, Bot, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 export default function Chat() {
     const [query, setQuery] = useState("");
@@ -13,12 +17,31 @@ export default function Chat() {
         setSummaryLoading(true);
         try {
             const response = await fetch("http://localhost:8000/summary", { method: "POST" });
-            const data = await response.json();
-            if (data.summary) {
-                setMessages((prev) => [...prev, { role: "ai", content: `**Summary:** ${data.summary}` }]);
+            if (!response.body) return;
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let summaryContent = "**Summary:** ";
+
+            // Add initial empty AI message
+            setMessages((prev) => [...prev, { role: "ai", content: summaryContent }]);
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                summaryContent += chunk;
+
+                setMessages((prev) => {
+                    const newMessages = [...prev];
+                    newMessages[newMessages.length - 1] = { role: "ai", content: summaryContent };
+                    return newMessages;
+                });
             }
         } catch (err) {
             console.error(err);
+            setMessages((prev) => [...prev, { role: "ai", content: "Error generating summary." }]);
         } finally {
             setSummaryLoading(false);
         }
@@ -38,11 +61,32 @@ export default function Chat() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ query: userMsg }),
             });
-            const data = await response.json();
-            setMessages((prev) => [...prev, { role: "ai", content: data.answer || "No response." }]);
+
+            if (!response.body) throw new Error("No response body");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let aiContent = "";
+
+            // Add initial empty AI message
+            setMessages((prev) => [...prev, { role: "ai", content: "" }]);
+            setLoading(false); // Stop loading once we start receiving the stream
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                aiContent += chunk;
+
+                setMessages((prev) => {
+                    const newMessages = [...prev];
+                    newMessages[newMessages.length - 1] = { role: "ai", content: aiContent };
+                    return newMessages;
+                });
+            }
         } catch (err) {
             setMessages((prev) => [...prev, { role: "ai", content: "Error connecting to AI backend." }]);
-        } finally {
             setLoading(false);
         }
     };
@@ -80,7 +124,16 @@ export default function Chat() {
                                 {m.role === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                             </div>
                             <div className={`p-3 rounded-2xl text-sm leading-relaxed ${m.role === "user" ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-200"}`}>
-                                {m.content}
+                                <ReactMarkdown
+                                    remarkPlugins={[remarkMath]}
+                                    rehypePlugins={[rehypeKatex]}
+                                    components={{
+                                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                        code: ({ children }) => <code className="bg-slate-900 px-1 rounded text-blue-300">{children}</code>
+                                    }}
+                                >
+                                    {m.content}
+                                </ReactMarkdown>
                             </div>
                         </div>
                     </div>

@@ -1,4 +1,5 @@
 import requests
+import json
 from pypdf import PdfReader
 import io
 
@@ -13,6 +14,26 @@ def extract_text_from_pdf(content: bytes) -> str:
 
 def extract_text_from_txt(content: bytes) -> str:
     return content.decode("utf-8").strip()
+
+def call_ollama_stream(prompt: str, model: str = "llama3"):
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": True
+    }
+    try:
+        response = requests.post(OLLAMA_URL, json=payload, stream=True)
+        response.raise_for_status()
+        
+        for line in response.iter_lines():
+            if line:
+                chunk = json.loads(line.decode("utf-8"))
+                if "response" in chunk:
+                    yield chunk["response"]
+                if chunk.get("done"):
+                    break
+    except Exception as e:
+        yield f"Error communicating with Ollama: {str(e)}"
 
 def call_ollama(prompt: str, model: str = "llama3") -> str:
     payload = {

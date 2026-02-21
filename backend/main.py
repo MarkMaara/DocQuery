@@ -1,7 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from utils import extract_text_from_pdf, extract_text_from_txt, call_ollama
+from utils import extract_text_from_pdf, extract_text_from_txt, call_ollama, call_ollama_stream
 import os
 
 app = FastAPI()
@@ -41,9 +42,8 @@ async def get_summary():
     if not document_store["text"]:
         raise HTTPException(status_code=400, detail="No document uploaded yet.")
     
-    prompt = f"Summarize the following document in a concise way:\n\n{document_store['text'][:4000]}" # Limit text for demo
-    summary = call_ollama(prompt)
-    return {"summary": summary}
+    prompt = f"Summarize the following document in a concise way:\n\n{document_store['text'][:4000]}"
+    return StreamingResponse(call_ollama_stream(prompt), media_type="text/plain")
 
 @app.post("/query")
 async def query_document(request: QueryRequest):
@@ -51,8 +51,7 @@ async def query_document(request: QueryRequest):
         raise HTTPException(status_code=400, detail="No document uploaded yet.")
     
     prompt = f"Using the following context, answer the user's question.\n\nContext: {document_store['text'][:4000]}\n\nQuestion: {request.query}"
-    answer = call_ollama(prompt)
-    return {"answer": answer}
+    return StreamingResponse(call_ollama_stream(prompt), media_type="text/plain")
 
 if __name__ == "__main__":
     import uvicorn
